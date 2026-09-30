@@ -1,4 +1,4 @@
-name: Nexus Engine - Guardião de Código
+name: Nexus Engine Security CI
 
 on:
   pull_request:
@@ -21,3 +21,4 @@ jobs:
 
     - name: Validar e Compilar Código Java
       run: mvn clean verify -DskipTests
+      #-DskipTests impede que o Maven tente rodar testes de integração que buscam o banco local, por enquanto.
