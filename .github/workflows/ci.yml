@@ -1,8 +1,4 @@
-name: Nexus Engine Security CI
-
-on:
-  pull_request:
-    branches: [ main, develop ]
+name: Nexus Engine - Guardião de Código
 
 on:
   pull_request:
@@ -24,5 +20,4 @@ jobs:
         cache: 'maven'
 
     - name: Validar e Compilar Código Java
-      # -DskipTests impede que o Maven tente rodar testes de integração que buscam o banco local, por enquanto.
       run: mvn clean verify -DskipTests
