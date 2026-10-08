@@ -7,6 +7,7 @@ public enum TipoVeiculo {
     // Por convencao, constantes de enums sao escritas em MAIUSCULAS.
     CARRO,
     MOTO,
-    BICICLETA
+    BICICLETA,
+    VAN
     // O ponto e virgula e opcional porque o enum possui apenas constantes.
 }
