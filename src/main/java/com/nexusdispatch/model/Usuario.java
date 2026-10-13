@@ -6,11 +6,12 @@ public abstract class Usuario {
     // Long aceita null; o banco atribuira o ID na futura persistencia.
     private Long id;
     private String nome;
-    private String email;
+    // Definido no construtor; nao existe operacao de troca nesta versao.
+    private final String email;
     // null representa telefone nao informado.
     private String telefone;
     // Guarda somente o hash recebido do servico, nunca a senha original.
-    private String senhaHash;
+    private final String senhaHash;
 
     // protected permite que subclasses chamem super(...) e acesso no pacote.
     // O servico devera gerar o hash usando uma biblioteca propria para senhas.

@@ -4,7 +4,7 @@ Projeto de marketplace local para aproximar consumidores e pequenos comerciantes
 
 ## Estado atual
 
-Atualizado em **08/10/2026**.
+Atualizado em **12/10/2026**.
 
 As classes `Bairro` e `Endereco` possuem atributos, construtores, validações, getters e setters. `Entregador` agora valida veículo, CNH, PBT e lotação no construtor e na atualização conjunta. Os seis enums já têm valores definidos. Usuario possui dados comuns e validações, com construtores nos quatro perfis. As demais entidades e as camadas de serviços, acesso a dados e controllers ainda são estruturas iniciais.
 
@@ -51,6 +51,14 @@ A implementação passou em 1.313 verificações locais de `work/EntregadorCheck
 ### Usuario e perfis
 
 Usuario agora centraliza nome, email, telefone opcional e hash recebido do serviço, além de ID inicialmente nulo. Os quatro perfis chamam seu construtor. Foram executadas 180 verificações adicionais. Consulte [as regras e limitações](docs/usuario.md). Autenticação e geração segura de hash ainda estão pendentes.
+
+### Catálogo por loja — atualização de 12/10/2026
+
+`Loja` já possui cadastro, validação de CNPJ numérico e abertura/fechamento.
+`Produto` pertence a uma única loja, com nome obrigatório de até 120 pontos de código Unicode e descrição opcional de até 1.000. O grupo substituiu o catálogo compartilhado do PDF por produtos próprios de cada loja.
+`OfertaProduto` obtém sua loja pelo produto e mantém preço não negativo, estoque, reserva de três unidades no cálculo de disponibilidade e histórico de entradas em memória. Não realiza baixas de compra nem verifica permissões.
+Veja [as regras de Produto](docs/produto.md), [Loja](docs/loja.md) e [OfertaProduto](docs/oferta-produto.md).
+`ItemPedido` deverá preservar nome, descrição e preço da compra; ainda não está implementado.
 
 ## Organização
 
