@@ -4,7 +4,7 @@ Marketplace local que conecta consumidores, lojas e entregadores, com catálogo 
 
 ## Estado atual
 
-Atualizado em **18/10/2026**. Linha de desenvolvimento: **`Java_files`**.
+Atualizado em **18/10/2026**. Primeira versão das entidades Java; desenvolvimento incremental na branch **`Java_files`** e integração na **`main`**.
 
 O projeto está na construção das entidades e validações. Já possui cadastro de lojas, produtos próprios de cada loja, ofertas e histórico de entradas de estoque em memória. **Ainda não há aplicação web executável, conexão com banco, login ou fluxo completo de compra e entrega.**
 
