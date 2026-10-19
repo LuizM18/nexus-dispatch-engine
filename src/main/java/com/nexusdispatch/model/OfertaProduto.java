@@ -12,11 +12,6 @@ import java.util.List;
 
 /** Preco e estoque de um produto em uma loja. Historico ainda somente em memoria. */
 public class OfertaProduto {
-    // private: acessivel diretamente apenas nesta classe.
-    // static: a constante pertence a classe, compartilhada por todas as ofertas.
-    // final: seu valor nao pode ser reatribuido. A reserva e sempre tres.
-    private static final int RESERVA_MINIMA = 3;
-
     // Long permite null: o ID sera atribuido na futura integracao com o banco.
     private Long id;
     // Uma oferta nao muda de produto nem de loja depois de criada.
@@ -25,7 +20,7 @@ public class OfertaProduto {
     // A loja vem do produto: nao guardamos outra referencia que possa divergir.
     // Cada loja cadastra seus proprios produtos, precos e estoques.
     private BigDecimal preco;
-    // Estoque fisico total, incluindo as tres unidades que nao podem ser vendidas.
+    // Todo o estoque pode ser vendido, inclusive as ultimas unidades.
     // Atributos int comecam em zero; variaveis locais nao recebem esse padrao.
     private int estoque;
     // Cada oferta possui sua propria lista, inicialmente vazia.
@@ -93,11 +88,9 @@ public class OfertaProduto {
     }
 
     public int getQuantidadeDisponivelParaVenda() {
-        // Estoque fisico pode ser 0, 1, 2 ou 3, mas nada fica disponivel para venda.
-        // Math.max escolhe o maior dos dois valores: nunca devolvemos negativo.
-        // Exemplo: estoque 12 -> max(0, 9) -> nove unidades para venda.
+        // Sem reserva minima: estoque 12 significa doze unidades para venda.
         // Este metodo so calcula; nao retira, bloqueia ou reserva unidades.
-        return Math.max(0, estoque - RESERVA_MINIMA);
+        return estoque;
     }
 
     public List<EntradaEstoque> getEntradasEstoque() {

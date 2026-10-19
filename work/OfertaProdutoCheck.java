@@ -42,7 +42,7 @@ public class OfertaProdutoCheck {
         o.adicionarEstoque(10);
         LocalDateTime depois = LocalDateTime.now();
         equal(10, o.getEstoque());
-        equal(7, o.getQuantidadeDisponivelParaVenda());
+        equal(10, o.getQuantidadeDisponivelParaVenda());
         equal(0, snapshot.size());
         var primeira = o.getEntradasEstoque().get(0);
         equal(10, primeira.quantidade());
@@ -72,7 +72,7 @@ public class OfertaProdutoCheck {
         for (int n : new int[] {0, 1, 2, 3, 4, 13}) {
             var oferta = new OfertaProduto(PRODUTO, BigDecimal.ONE, n);
             equal(n, oferta.getEstoque());
-            equal(Math.max(0, n - 3), oferta.getQuantidadeDisponivelParaVenda());
+            equal(n, oferta.getQuantidadeDisponivelParaVenda());
             equal(n == 0 ? 0 : 1, oferta.getEntradasEstoque().size());
             if (n > 0) equal(n, oferta.getEntradasEstoque().get(0).quantidade());
         }
