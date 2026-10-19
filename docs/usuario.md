@@ -30,3 +30,5 @@ Usa hashes ficticios, sem credenciais reais. EntregadorCheck foi adaptado para
 o novo construtor e manteve suas 1.313 verificacoes. EnderecoCheck passou em 104
 verificacoes; os dois testes de Bairro tambem passaram. Compilacao com Java 25
 e -Xlint:all sem erros ou avisos. Os testes ainda sao locais, nao integrados ao Maven.
+
+Atualização de 15/10/2026: Consumidor exige também um Endereco no construtor. As 180 verificações dos perfis foram adaptadas e passaram. Consulte docs/consumidor.md.

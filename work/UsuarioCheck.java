@@ -20,7 +20,10 @@ public class UsuarioCheck {
     }
 
     public static void main(String[] args) {
-        Factory[] factories = {Consumidor::new, Lojista::new, Administrador::new,
+        Factory[] factories = {
+            (n, e, t, h) -> new Consumidor(n, e, t, h, new Endereco(
+                    new Bairro("Centro", "Cidade", true), "01234567", null, "Rua Um", "1")),
+            Lojista::new, Administrador::new,
             (n, e, t, h) -> new Entregador(n, e, t, h, TipoVeiculo.BICICLETA, null, null, null)};
         for (Factory f : factories) {
             Usuario u = f.create("  João Silva  ", "  joao@example.com  ", "  11999990000  ", HASH);

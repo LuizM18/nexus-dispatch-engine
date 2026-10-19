@@ -89,14 +89,31 @@ public class EntregadorCheck {
             }
         }
         Entregador bike = new Entregador("Teste", "teste@example.com", null, "hash-ficticio-de-teste", TipoVeiculo.BICICLETA, null, null, null);
+        equal(false, bike.isDisponivel());
+        bike.ficarIndisponivel();
+        equal(false, bike.isDisponivel());
+        bike.ficarDisponivel();
+        equal(true, bike.isDisponivel());
+        bike.ficarDisponivel();
+        equal(true, bike.isDisponivel());
+        state(bike, TipoVeiculo.BICICLETA, null, null, null);
+        Entregador outro = new Entregador("Outro", "outro@example.com", null,
+                "hash-ficticio-de-teste", TipoVeiculo.CARRO, CategoriaCnh.B, null, null);
+        equal(false, outro.isDisponivel());
         reject(() -> bike.atualizarVeiculoECnh(TipoVeiculo.MOTO, CategoriaCnh.B, null, null));
         state(bike, TipoVeiculo.BICICLETA, null, null, null);
+        equal(true, bike.isDisponivel());
         bike.atualizarVeiculoECnh(TipoVeiculo.MOTO, CategoriaCnh.A, null, null);
+        state(bike, TipoVeiculo.MOTO, CategoriaCnh.A, null, null);
+        equal(true, bike.isDisponivel());
+        bike.ficarIndisponivel();
+        equal(false, bike.isDisponivel());
         state(bike, TipoVeiculo.MOTO, CategoriaCnh.A, null, null);
         bike.atualizarVeiculoECnh(TipoVeiculo.VAN, CategoriaCnh.C, 5000, 0);
         state(bike, TipoVeiculo.VAN, CategoriaCnh.C, 5000, 0);
         bike.atualizarVeiculoECnh(TipoVeiculo.BICICLETA, null, null, null);
         state(bike, TipoVeiculo.BICICLETA, null, null, null);
+        equal(false, bike.isDisponivel());
         reject(() -> CategoriaCnh.valueOf("D"));
         reject(() -> CategoriaCnh.valueOf("<script>"));
         System.out.println("Entregador: " + checks + " verificacoes passaram.");

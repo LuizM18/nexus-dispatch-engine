@@ -7,7 +7,7 @@ import com.nexusdispatch.enums.CategoriaCnh;
  * Usuario responsavel pelas entregas, com CNH conforme o veiculo; bicicleta dispensa CNH.
  * VAN representa van de carga a combustao, sem reboque, com ate oito passageiros.
  * Essas caracteristicas ainda precisam de verificacao no futuro cadastro.
- * Dados pessoais sao herdados de Usuario; disponibilidade continua pendente.
+ * Dados pessoais sao herdados de Usuario; disponibilidade e ativada manualmente.
  */
 public class Entregador extends Usuario {
     private TipoVeiculo tipoVeiculo;
@@ -15,6 +15,9 @@ public class Entregador extends Usuario {
     // Integer permite null: estes dados se aplicam somente a VAN nesta versao.
     private Integer pesoBrutoTotalKg;
     private Integer capacidadePassageiros;
+    // Cada entregador possui seu proprio estado; boolean aceita true ou false.
+    // Nao e final porque o estado pode mudar durante o uso do sistema.
+    private boolean disponivel;
 
     public Entregador(String nome, String email, String telefone, String senhaHash,
             TipoVeiculo tipoVeiculo, CategoriaCnh categoriaCnh,
@@ -22,7 +25,28 @@ public class Entregador extends Usuario {
         // Inicializa e valida os dados comuns na superclasse antes dos especificos.
         super(nome, email, telefone, senhaHash);
         definirVeiculoECnh(tipoVeiculo, categoriaCnh, pesoBrutoTotalKg, capacidadePassageiros);
+        // Comeca indisponivel; o cadastro nao o libera automaticamente para entregas.
+        this.disponivel = false;
     }
+
+    // Getter booleano: consulta o estado sem modifica-lo.
+    public boolean isDisponivel() {
+        return disponivel;
+    }
+
+    public void ficarDisponivel() {
+        // Repetir esta operacao mantem true, sem inverter o estado.
+        this.disponivel = true;
+    }
+
+    public void ficarIndisponivel() {
+        // Afeta apenas a disponibilidade; nao cancela entregas existentes.
+        this.disponivel = false;
+    }
+
+    // Estes metodos nao consultam entregas nem autenticam o usuario.
+    // O servico devera conferir permissoes, ordens em andamento e elegibilidade
+    // antes de aceitar uma entrega. Disponivel nao significa automaticamente apto.
 
     public TipoVeiculo getTipoVeiculo() {
         return tipoVeiculo;
