@@ -39,8 +39,7 @@ Tambem dependem de servico/banco: um lojista por loja e uma loja por lojista;
 responsavel cadastrado e autorizado; bairro existente e atendido; permissoes
 para editar/abrir/fechar; tratamento de mudanca de endereco com pedidos ativos.
 
-CompraService devera conferir loja aberta, quantidade positiva e reserva de
-tres unidades por oferta, de forma transacional. Fechar nao cancela pedidos.
+CompraService devera conferir loja aberta, quantidade positiva e saldo suficiente por oferta, de forma transacional. Fechar nao cancela pedidos.
 Consulta de existencia ou regularidade do CNPJ exige conferencia externa.
 
 ## Testes

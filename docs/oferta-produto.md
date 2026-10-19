@@ -12,7 +12,7 @@ inicial positivo tambem gera entrada; zero nao gera movimentacao.
 
 EntradaEstoque e um record interno imutavel. O getter retorna copia nao
 modificavel da lista; nao existe setter de estoque. A quantidade disponivel
-para venda e max(0, estoque - 3), mas nao representa reserva efetiva de compra.
+para venda e igual ao estoque total, sem reserva minima. A consulta nao efetua baixa.
 
 ## Limites
 
@@ -24,7 +24,7 @@ Reconstituir do banco precisara de fluxo proprio para nao registrar novamente
 o saldo carregado como uma entrada inicial.
 
 Baixa por compra, loja aberta, unicidade produto/loja e permissoes ainda nao estao
-implementadas. ItemPedido devera armazenar uma copia do preco da compra.
+implementadas. ItemPedido armazena o preco historico da compra.
 Nao se pretende um historico completo de saidas nesta entrega; foi solicitado
 historico de entradas. Estoque inicial e reposicoes nao comprovam estoque real.
 
@@ -32,5 +32,5 @@ historico de entradas. Estoque inicial e reposicoes nao comprovam estoque real.
 
 work/OfertaProdutoCheck.java testa preco nulo/negativo/zero, preservacao apos
 erros, referencias obrigatorias, estoque inicial, entradas sucessivas,
-quantidades invalidas, overflow, historico imutavel, data/hora e reserva de tres.
+quantidades invalidas, overflow, historico imutavel, data/hora e disponibilidade de todo o estoque.
 Executavel diretamente, seguindo os testes locais existentes, sem banco.

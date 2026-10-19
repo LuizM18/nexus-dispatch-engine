@@ -17,7 +17,7 @@ Somente o lojista responsavel devera editar, mas essa permissao NAO esta
 implementada na entidade. O servico precisara consultar o usuario autenticado.
 O endereco e demais dados da loja continuam mutaveis pelo proprio objeto Loja.
 
-ItemPedido devera congelar nome, descricao e preco no momento da compra.
+ItemPedido preserva nome, descricao e preco do momento de sua criacao; deve ser criado na confirmacao da compra.
 Essa classe ainda esta vazia: o historico de compras ainda nao foi implementado.
 
 Testes locais: ProdutoCheck cobre entradas invalidas, fronteiras 120/121 e
