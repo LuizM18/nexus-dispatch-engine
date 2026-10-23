@@ -1,0 +1,69 @@
+USE nexus_db;
+
+DROP TRIGGER IF EXISTS trg_audita_status_pedido;
+
+ALTER TABLE usuario 
+MODIFY COLUMN senha_hash CHAR(60) NOT NULL;
+
+ALTER TABLE pagamento DROP FOREIGN KEY fk_pagamento_pedido;
+
+RENAME TABLE pedido TO pedido_mestre;
+
+ALTER TABLE pedido_mestre
+DROP COLUMN valor_frete,   
+DROP COLUMN taxa_plataforma,
+MODIFY COLUMN status_pedido ENUM('CRIADO', 'PAGO', 'CONCLUIDO', 'CANCELADO') NOT NULL DEFAULT 'CRIADO';
+
+ALTER TABLE pagamento
+ADD CONSTRAINT fk_pagamento_pedido_mestre FOREIGN KEY (id_pedido) REFERENCES pedido_mestre(id_pedido) ON DELETE RESTRICT;
+
+CREATE TABLE comanda_lojista (
+    id_comanda INT AUTO_INCREMENT PRIMARY KEY,
+    id_pedido INT NOT NULL,
+    id_lojista INT NOT NULL,
+    valor_produtos DECIMAL(10,2) NOT NULL,
+    taxa_venda_retida DECIMAL(10,2) NOT NULL, 
+    repasse_lojista DECIMAL(10,2) NOT NULL,   
+    status_comanda ENUM('PAGO', 'PREPARANDO', 'AGUARDANDO_COLETA', 'CANCELADO') NOT NULL DEFAULT 'PAGO',
+    data_hora_status TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, 
+    CONSTRAINT fk_comanda_pedido_mestre FOREIGN KEY (id_pedido) REFERENCES pedido_mestre(id_pedido),
+    CONSTRAINT fk_comanda_lojista FOREIGN KEY (id_lojista) REFERENCES lojista(id_lojista)
+) ENGINE=InnoDB;
+
+ALTER TABLE item_pedido
+DROP FOREIGN KEY fk_item_pedido; 
+
+ALTER TABLE item_pedido
+CHANGE COLUMN id_pedido id_comanda INT NOT NULL,
+MODIFY COLUMN observacao VARCHAR(255) DEFAULT 'Nenhuma', 
+ADD CONSTRAINT fk_item_comanda FOREIGN KEY (id_comanda) REFERENCES comanda_lojista(id_comanda) ON DELETE CASCADE;
+
+ALTER TABLE ordem_entrega
+DROP FOREIGN KEY fk_entrega_pedido,
+DROP INDEX uk_entrega_pedido; 
+
+ALTER TABLE ordem_entrega
+CHANGE COLUMN id_pedido id_comanda INT NOT NULL,
+ADD COLUMN taxa_frete_retida DECIMAL(10,2) NOT NULL, 
+MODIFY COLUMN status_entrega ENUM('AGUARDANDO_COLETA', 'EM_TRANSITO', 'ENTREGUE', 'DEVOLVIDO', 'CANCELADO') NOT NULL DEFAULT 'AGUARDANDO_COLETA',
+ADD COLUMN data_hora_coleta TIMESTAMP NULL, 
+ADD COLUMN data_hora_entrega TIMESTAMP NULL,
+ADD CONSTRAINT fk_ordem_comanda FOREIGN KEY (id_comanda) REFERENCES comanda_lojista(id_comanda) ON DELETE CASCADE;
+
+CREATE TABLE auditoria_sistema (
+    id_auditoria INT AUTO_INCREMENT PRIMARY KEY,
+    tabela_afetada VARCHAR(50) NOT NULL, 
+    id_registro_afetado INT NOT NULL,    
+    id_usuario_ator INT NULL,            
+    acao ENUM('INSERT', 'UPDATE', 'SOFT_DELETE') NOT NULL,
+    dados_anteriores JSON NULL,          
+    dados_novos JSON NULL,               
+    ip_origem VARCHAR(45) DEFAULT '127.0.0.1',
+    data_hora_acao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_auditoria_usuario FOREIGN KEY (id_usuario_ator) REFERENCES usuario(id_usuario)
+) ENGINE=InnoDB;
+
+ALTER TABLE produto ADD COLUMN categoria VARCHAR(50) NOT NULL DEFAULT 'OUTROS' AFTER nome;
+
+ALTER TABLE comanda_lojista 
+MODIFY COLUMN status_comanda ENUM('PAGO', 'PREPARANDO', 'AGUARDANDO_COLETA', 'EM_TRANSITO', 'CONCLUIDO', 'CANCELADO') NOT NULL DEFAULT 'PAGO';
