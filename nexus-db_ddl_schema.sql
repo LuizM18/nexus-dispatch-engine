@@ -1,4 +1,4 @@
-CREATE DATABASE IF NOT EXISTS nexus_db 
+CREATE DATABASE IF NOT EXISTS nexus_db;
 USE nexus_db;
 
 CREATE TABLE usuario (
