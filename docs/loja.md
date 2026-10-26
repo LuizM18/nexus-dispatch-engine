@@ -44,7 +44,7 @@ Consulta de existencia ou regularidade do CNPJ exige conferencia externa.
 
 ## Testes
 
-work/LojaCheck.java cobre dados validos, zeros iniciais, espacos externos,
+tests/manual/LojaCheck.java cobre dados validos, zeros iniciais, espacos externos,
 14 digitos, letras, mascara, espacos internos, digitos Unicode, referencias
 obrigatorias, abertura/fechamento e preservacao de dados apos erros.
 Inclui demonstracoes explicitas das limitacoes de unicidade e digitos.

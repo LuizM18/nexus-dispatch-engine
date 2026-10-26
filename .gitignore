@@ -7,3 +7,12 @@ target/
 .idea/
 *.iml
 .vscode/
+archive/apoio-local/
+archive/
+outputs/
+work/
+*.pdf
+*.docx
+*.jar
+__pycache__/
+*.pyc

@@ -30,7 +30,7 @@ historico de entradas. Estoque inicial e reposicoes nao comprovam estoque real.
 
 ## Verificacao
 
-work/OfertaProdutoCheck.java testa preco nulo/negativo/zero, preservacao apos
+tests/manual/OfertaProdutoCheck.java testa preco nulo/negativo/zero, preservacao apos
 erros, referencias obrigatorias, estoque inicial, entradas sucessivas,
 quantidades invalidas, overflow, historico imutavel, data/hora e disponibilidade de todo o estoque.
 Executavel diretamente, seguindo os testes locais existentes, sem banco.

@@ -11,7 +11,7 @@ Dados pessoais e disponibilidade continuam pendentes.
 
 - Todos os arquivos Java de src e as verificações locais compilaram com Java 25,
   UTF-8 e -Xlint:all, sem erros ou avisos.
-- work/EntregadorCheck.java: 1.313 verificações passaram, cobrindo todas as categorias
+- tests/manual/EntregadorCheck.java: 1.313 verificações passaram, cobrindo todas as categorias
   e null, construtor e atualização, limites de 3.500/3.501 kg e 8/9 passageiros,
   valores ausentes/negativos, campos exclusivos de van, transições válidas e
   preservação dos quatro atributos após alterações recusadas.

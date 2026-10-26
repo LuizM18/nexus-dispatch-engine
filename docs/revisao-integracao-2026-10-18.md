@@ -105,7 +105,7 @@ e nao protegeria diferentes instancias do servidor.
 
 ## Como reproduzir
 
-Na raiz do repositorio, executar `./work/RunChecks.ps1` com Java 25 no PATH.
+Na raiz do repositorio, executar `./scripts/RunChecks.ps1` com Java 25 no PATH.
 O script compila src e todos os checks, abortando na primeira falha. A secao
 PENDENTE confirma as limitacoes conhecidas e deve virar teste de rejeicao quando
 os servicos forem implementados. Nao usar sua saida como aprovacao de seguranca.
