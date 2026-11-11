@@ -1,0 +1,21 @@
+target/
+*.class
+*.log
+.env
+.env.*
+!.env.example
+.idea/
+*.iml
+.vscode/
+archive/apoio-local/
+archive/
+outputs/
+work/
+*.pdf
+*.docx
+*.jar
+__pycache__/
+*.pyc
+
+# Testes de estudo locais e seus executores nao fazem parte da entrega Git.
+/tests/local/
