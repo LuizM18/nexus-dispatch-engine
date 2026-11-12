@@ -21,9 +21,9 @@ Se um terminal antigo ja estiver aberto, sair com 0 e executar a versao nova.
 
 1. Escolher 9, depois 2 para lojista. Informar nome, documento fiscal, email,
    nome fantasia, comissao em percentual, bairro e origem textual.
-2. Informar senha de 15 a 128 caracteres e repetir. Espacos nao sao cortados.
-   Console nativo oculta a digitacao; entrada redirecionada/IDE pode nao ocultar
-   e informa isso. Nunca usar senhas reais em roteiros de teste compartilhados.
+2. Informar senha de 10 a 128 caracteres e repetir. Espacos nao sao cortados.
+   Em Criar perfil, a senha e a confirmacao ficam visiveis durante a digitacao.
+   Nunca usar senhas reais em roteiros de teste compartilhados.
 3. Aguardar ID confirmado. O lojista fica selecionado automaticamente. Escolher
    2 no menu principal para cadastrar produto (opcao 2 do submenu era lojista).
 4. Usar 10 para listar IDs, nomes, perfis e atividade. Documento/email/hash
@@ -75,7 +75,7 @@ Nao afirmar conformidade FIPS por usar o algoritmo. Outro consumidor de senhas
 deve conhecer/verificar P2; hashes ficticios ou bcrypt nao sao aceitos como P2.
 Banco estava vazio na verificacao, portanto nao houve migracao de credenciais.
 
-gerar valida politica inicial (15 a 128 unidades UTF-16, nao somente espacos),
+gerar valida a politica de senha (10 a 128 unidades UTF-16, nao somente espacos),
 gera salt com SecureRandom e deriva a chave. Nao modifica o array do chamador.
 Senhas iguais geram hashes diferentes por causa do salt.
 verificar aceita somente versao/parametros/tamanhos conhecidos e codificacao

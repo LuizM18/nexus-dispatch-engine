@@ -1,24 +1,49 @@
 package com.nexusdispatch.console;
 
-import com.nexusdispatch.model.*;
-import com.nexusdispatch.service.ProdutoService;
-import com.nexusdispatch.service.CadastroService;
-import com.nexusdispatch.service.UsuarioService;
-import com.nexusdispatch.service.LojistaService;
-import com.nexusdispatch.service.EntregadorService;
-import com.nexusdispatch.service.CompraService;
+import java.io.BufferedReader;
+import java.io.Console;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.Reader;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+
 import com.nexusdispatch.enums.MetodoPagamento;
 import com.nexusdispatch.enums.PerfilUsuario;
 import com.nexusdispatch.enums.StatusPagamento;
 import com.nexusdispatch.enums.TipoVeiculo;
-import java.io.*;
-import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
-import java.util.*;
+import com.nexusdispatch.model.Administrador;
+import com.nexusdispatch.model.Consumidor;
+import com.nexusdispatch.model.Entregador;
+import com.nexusdispatch.model.EntregadorRegistro;
+import com.nexusdispatch.model.Lojista;
+import com.nexusdispatch.model.LojistaRegistro;
+import com.nexusdispatch.model.PedidoMestreRegistro;
+import com.nexusdispatch.model.ProdutoRegistro;
+import com.nexusdispatch.model.Usuario;
+import com.nexusdispatch.model.UsuarioRegistro;
+import com.nexusdispatch.service.CadastroService;
+import com.nexusdispatch.service.CompraService;
+import com.nexusdispatch.service.EntregadorService;
+import com.nexusdispatch.service.LojistaService;
+import com.nexusdispatch.service.ProdutoService;
+import com.nexusdispatch.service.SenhaService;
+import com.nexusdispatch.service.UsuarioService;
 
-/** Terminal de demonstracao por perfil, com persistencia delegada aos servicos JDBC. */
+/** Terminal com login por perfil e persistencia delegada aos servicos JDBC. */
 public final class ConsoleNexus {
+    private static final String FAIXA_SENHA = " (" + SenhaService.MIN_CARACTERES + " a "
+            + SenhaService.MAX_CARACTERES + " caracteres): ";
+    private static final int TAMANHO_PAGINA_PERFIS = 20;
     private final ProdutoService produtos;
     private final BufferedReader entrada;
     private final PrintWriter saida;
@@ -28,12 +53,7 @@ public final class ConsoleNexus {
     private final LojistaService lojistas;
     private final EntregadorService entregadores;
     private final CompraService compras;
-    // Mapa externo: ID do cliente -> seu carrinho. Mapa interno: ID do produto -> item.
-    // Esse estado vive somente nesta instancia do terminal; voltar ao menu o conserva,
-    // mas encerrar o processo o perde. Nenhuma inclusao aqui reserva estoque no banco.
-    private final Map<Long, Map<Long, CompraService.ItemCarrinho>> carrinhos = new HashMap<>();
-    // Loja selecionada para os comandos compartilhados de produto. Long permite
-    // null antes da selecao; nao e uma identidade autenticada nem uma permissao.
+    // Loja selecionada para o CRUD. No menu autenticado, o lojista usa a propria loja.
     private Long idLojista;
 
     /** Recebe recursos para permitir execucao interativa e verificacoes com entrada controlada. */
@@ -101,13 +121,14 @@ public final class ConsoleNexus {
         saida.println("Cadastro inicial de administrador");
         try {
             var dados = new CadastroService.DadosUsuario(ler("Nome: "), ler("Documento fiscal: "), ler("Email: "));
-            char[] senha = lerSenha("Senha (15 a 128 caracteres): ");
+            char[] senha = lerSenha("Senha" + FAIXA_SENHA);
             char[] confirmacao = null;
             try {
                 confirmacao = lerSenha("Confirme a senha: ");
                 if (!Arrays.equals(senha, confirmacao)) throw new IllegalArgumentException("Senhas nao conferem.");
                 var admin = cadastros.cadastrarAdministradorInicial(dados, senha);
                 saida.println("Administrador cadastrado. ID " + admin.id());
+                saida.println("Abra o terminal e escolha Entrar. Use o e-mail e a senha cadastrados.");
             } finally {
                 // finally limpa os arrays mesmo se confirmacao ou cadastro falhar. O service
                 // recebe a senha apenas para derivacao; nao a inclui no registro de resposta.
@@ -123,18 +144,13 @@ public final class ConsoleNexus {
         }
     }
 
-    /** Menu usado na banca. Os IDs selecionam os atores existentes no modo de demonstracao. */
+    /** Entrada do terminal. Cada login abre apenas a area do perfil autenticado. */
     public void executarPorPerfil() throws IOException {
-        saida.println("Nexus Dispatch | Demonstracao por ID");
         try {
-            menu("NEXUS DISPATCH", "1 Cliente | 2 Lojista / Loja | 3 Entregador\n"
-                    + "4 Administrador | 5 Criar perfil | 0 Sair", opcao -> {
+            menu("NEXUS DISPATCH", "1 Entrar | 2 Criar perfil | 0 Sair", opcao -> {
                 switch (opcao) {
-                    case 1 -> menuCliente();
-                    case 2 -> menuProdutos();
-                    case 3 -> menuEntregador();
-                    case 4 -> menuAdministrador();
-                    case 5 -> cadastrarPerfil();
+                    case 1 -> entrar();
+                    case 2 -> cadastrarPerfil(true);
                     default -> throw new IllegalArgumentException("Opcao invalida.");
                 }
             });
@@ -145,6 +161,36 @@ public final class ConsoleNexus {
         saida.flush();
     }
 
+    private void entrar() throws IOException, SQLException {
+        String email = ler("E-mail (Enter para voltar): ");
+        if (email.isEmpty()) return;
+
+        char[] senha = lerSenha("Senha: ");
+        Optional<UsuarioRegistro> autenticado;
+        try {
+            autenticado = usuarios.autenticar(email, senha);
+        } finally {
+            Arrays.fill(senha, '\0');
+        }
+        if (autenticado.isEmpty()) {
+            saida.println("Não foi possível entrar. Confira o e-mail e a senha e tente novamente.");
+            return;
+        }
+
+        UsuarioRegistro usuario = autenticado.orElseThrow();
+        try {
+            switch (usuario.perfil()) {
+                case CLIENTE -> menuCliente(usuario);
+                case LOJISTA -> menuProdutos(usuario.id(), "Sair da conta");
+                case ENTREGADOR -> menuEntregador(usuario);
+                case ADMIN -> menuAdministrador(usuario);
+            }
+            saida.println("Você saiu da conta.");
+        } finally {
+            idLojista = null;
+        }
+    }
+
     @FunctionalInterface
     // Cada submenu fornece uma lambda que interpreta sua opcao. O laco comum
     // cuida de repetir a leitura e tratar falhas, sem duplicar esse controle em cada tela.
@@ -153,8 +199,7 @@ public final class ConsoleNexus {
     /** Mantem o usuario no submenu se uma operacao falhar. O zero sempre volta um nivel. */
     private void menu(String titulo, String opcoes, AcaoMenu acao) throws IOException {
         while (true) {
-            saida.println("\n" + titulo);
-            saida.println(opcoes);
+            mostrarMenu(titulo, opcoes);
             try {
                 int opcao = inteiro("Opcao: ");
                 if (opcao == 0) return;
@@ -170,29 +215,60 @@ public final class ConsoleNexus {
         }
     }
 
-    /** Valida o perfil persistido antes de entrar em uma area do terminal. */
-    private UsuarioRegistro selecionarPerfil(PerfilUsuario perfil) throws IOException, SQLException {
-        int id = inteiro("ID do perfil " + perfil + " (0 para voltar): ");
-        if (id == 0) return null;
-        return usuarios.buscar(id).filter(u -> u.perfil() == perfil && Boolean.TRUE.equals(u.ativo()))
-                .orElseThrow(() -> new IllegalArgumentException("Selecione um usuario ativo com perfil " + perfil + "."));
+    private void mostrarMenu(String titulo, String opcoes) {
+        saida.println("\n=== " + titulo + " ===\n");
+        for (String opcao : opcoes.split(" \\| |\\n")) {
+            int separador = opcao.indexOf(' ');
+            saida.println(opcao.substring(0, separador) + ". " + opcao.substring(separador + 1));
+        }
+        saida.println();
+    }
+
+    /** Escolhe uma loja para consulta de catalogo ou gestao administrativa. */
+    private long lerIdDeLoja(String rotulo) throws IOException, SQLException {
+        long depoisDe = 0;
+        String ajuda = "? para listar";
+        while (true) {
+            String resposta = ler(rotulo + " (" + ajuda + ", 0 para voltar): ");
+            if (resposta.equals("?")) {
+                var pagina = usuarios.listarLojasAtivasApos(depoisDe, TAMANHO_PAGINA_PERFIS + 1);
+                if (pagina.isEmpty()) {
+                    saida.println("Nenhuma loja ativa encontrada nesta lista.");
+                } else {
+                    saida.println("\n=== LOJAS | NOMES E IDs ===");
+                    for (var item : pagina.subList(0, Math.min(pagina.size(), TAMANHO_PAGINA_PERFIS))) {
+                        saida.println("ID " + item.id() + " - " + item.nome());
+                    }
+                }
+                boolean mais = pagina.size() > TAMANHO_PAGINA_PERFIS;
+                depoisDe = mais ? pagina.get(TAMANHO_PAGINA_PERFIS - 1).id() : 0;
+                ajuda = mais ? "? para próxima página" : "? para listar";
+            } else {
+                try {
+                    long id = Long.parseLong(resposta);
+                    if (id >= 0 && id <= Integer.MAX_VALUE) return id;
+                } catch (NumberFormatException erro) {
+                    // A mensagem abaixo permite corrigir o ID sem voltar ao menu.
+                }
+                saida.println("Digite um ID válido, ? para listar ou 0 para voltar.");
+            }
+        }
     }
 
     /** Todos os perfis exibem a mesma identidade por meio da classe base Usuario. */
-    private static String tituloPerfil(Usuario perfil, long id) {
-        return perfil.getPerfil() + " | ID " + id + " | " + perfil.getNome();
+    private static String tituloPerfil(Usuario perfil) {
+        return perfil.getPerfil() + " | " + perfil.getNome();
     }
 
     /** Reutiliza os comandos de produto no menu do lojista e no do administrador. */
-    private void menuProdutos() throws IOException, SQLException {
-        int id = inteiro("ID do lojista (0 para voltar): ");
-        if (id == 0) return;
+    private void menuProdutos(long id, String textoVoltar) throws IOException, SQLException {
         Lojista lojista = produtos.consultarLojista(id);
-        idLojista = (long) id;
-        menu(tituloPerfil(lojista, id), "1 Cadastrar | 2 Listar | 3 Buscar | 4 Editar\n"
-                + "5 Repor estoque | 6 Ativar/desativar | 7 Remover | 0 Voltar", opcao -> {
+        idLojista = id;
+        saida.println("Loja: " + lojista.getDadosLojista().orElseThrow().nomeFantasia() + " (ID " + id + ")");
+        menu("CADASTRO DE PRODUTOS", "1 Cadastrar produto | 2 Listar produtos | 3 Buscar produto | 4 Atualizar produto\n"
+                + "5 Repor estoque | 6 Ativar/desativar produto | 7 Remover produto | 0 " + textoVoltar, opcao -> {
             switch (opcao) {
-                case 1 -> mostrar(produtos.cadastrar(lerCadastro(null)));
+                case 1 -> cadastrarProduto();
                 case 2 -> listar();
                 case 3 -> buscar();
                 case 4 -> atualizar();
@@ -205,12 +281,10 @@ public final class ConsoleNexus {
     }
 
     /** Disponibilidade operacional preserva o cadastro do entregador. */
-    private void menuEntregador() throws IOException, SQLException {
-        var perfil = selecionarPerfil(PerfilUsuario.ENTREGADOR);
-        if (perfil == null) return;
+    private void menuEntregador(UsuarioRegistro perfil) throws IOException, SQLException {
         var entregador = consultarEntregador(perfil.id());
         mostrarEntregador(entregador);
-        menu(tituloPerfil(entregador, perfil.id()), "1 Consultar perfil | 2 Ficar disponivel | 3 Ficar inativo | 0 Voltar", opcao -> {
+        menu(tituloPerfil(entregador), "1 Consultar perfil | 2 Ficar disponivel | 3 Ficar inativo | 0 Sair da conta", opcao -> {
             switch (opcao) {
                 case 1 -> mostrarEntregador(consultarEntregador(perfil.id()));
                 case 2, 3 -> {
@@ -232,19 +306,18 @@ public final class ConsoleNexus {
     // apenas pela atividade do usuario. A impressao nao altera esse estado.
     private void mostrarEntregador(Entregador entregador) {
         var dados = entregador.toEntregadorRegistro();
-        saida.println("ID " + dados.id() + " | " + entregador.getNome() + " | " + dados.tipoVeiculo()
-                + " | " + dados.bairroOperacao() + " | Situacao: " + dados.statusOperacao());
+        saida.println("\nID: " + dados.id());
+        saida.println("Nome: " + entregador.getNome());
+        saida.println("Veiculo: " + dados.tipoVeiculo());
+        saida.println("Bairro de operacao: " + dados.bairroOperacao());
+        saida.println("Situacao: " + dados.statusOperacao());
     }
 
-    /** O carrinho pertence ao cliente selecionado e sobrevive a voltar entre submenus. */
-    private void menuCliente() throws IOException, SQLException {
-        var cliente = selecionarPerfil(PerfilUsuario.CLIENTE);
-        if (cliente == null) return;
-        // computeIfAbsent cria o mapa apenas na primeira entrada deste cliente.
-        // LinkedHashMap preserva a ordem de insercao dos produtos na exibicao.
-        var carrinho = carrinhos.computeIfAbsent(cliente.id(), id -> new LinkedHashMap<>());
-        menu(tituloPerfil(new Consumidor(cliente), cliente.id()),
-                "1 Catalogo por loja | 2 Carrinho | 3 Meus pedidos | 0 Voltar", opcao -> {
+    /** O carrinho dura somente a sessao do cliente. */
+    private void menuCliente(UsuarioRegistro cliente) throws IOException {
+        Map<Long, CompraService.ItemCarrinho> carrinho = new LinkedHashMap<>();
+        menu(tituloPerfil(new Consumidor(cliente)),
+                "1 Catalogo por loja | 2 Carrinho | 3 Meus pedidos | 0 Sair da conta", opcao -> {
             switch (opcao) {
                 case 1 -> catalogo();
                 case 2 -> menuCarrinho(cliente.id(), carrinho);
@@ -256,7 +329,7 @@ public final class ConsoleNexus {
 
     /** A pagina de catalogo exibe somente itens ativos e com saldo. */
     private void catalogo() throws IOException, SQLException {
-        int id = inteiro("ID da loja (0 para voltar): ");
+        long id = lerIdDeLoja("ID da loja");
         if (id == 0) return;
         var pagina = produtos.listar(id, 20, inteiro("Pular quantos registros (0 para inicio): "));
         var disponiveis = pagina.stream().filter(p -> Boolean.TRUE.equals(p.ativo()) && p.estoqueDisponivel() > 0).toList();
@@ -334,7 +407,10 @@ public final class ConsoleNexus {
             case 3 -> MetodoPagamento.BOLETO;
             default -> throw new IllegalArgumentException("Metodo de pagamento invalido.");
         };
-        if (!simNao("Confirmar pedido (s/n): ")) return;
+        if (!simNao("Confirmar pedido (s/n): ")) {
+            saida.println("Pedido não enviado. Os produtos continuam no carrinho.");
+            return;
+        }
         var resultado = service.comprarConfirmado(cliente, itens, metodo, cotacao);
         mostrarResumoPedido(resultado.pedido());
         saida.println("Pagamento: " + resultado.pagamento().statusPagamento());
@@ -397,15 +473,16 @@ public final class ConsoleNexus {
         }
     }
 
-    /** A area administrativa exige selecionar um ADMIN ativo no modo de demonstracao. */
-    private void menuAdministrador() throws IOException, SQLException {
-        var admin = selecionarPerfil(PerfilUsuario.ADMIN);
-        if (admin == null) return;
-        menu(tituloPerfil(new Administrador(admin), admin.id()),
-                "1 Gerenciar usuarios | 2 Gerenciar produtos por loja | 3 Consultar pedido | 0 Voltar", opcao -> {
+    /** Area acessivel somente depois de autenticar uma conta ADMIN. */
+    private void menuAdministrador(UsuarioRegistro admin) throws IOException {
+        menu(tituloPerfil(new Administrador(admin)),
+                "1 Gerenciar usuarios | 2 Gerenciar produtos por loja | 3 Consultar pedido | 0 Sair da conta", opcao -> {
             switch (opcao) {
                 case 1 -> menuUsuarios();
-                case 2 -> menuProdutos();
+                case 2 -> {
+                    long id = lerIdDeLoja("ID da loja");
+                    if (id != 0) menuProdutos(id, "Voltar");
+                }
                 case 3 -> mostrarPedido(comprasConfiguradas().buscarCompraComoAdministrador(admin.id(), inteiro("ID do pedido: ")));
                 default -> throw new IllegalArgumentException("Opcao invalida.");
             }
@@ -415,12 +492,12 @@ public final class ConsoleNexus {
     // Traduz opcoes da area administrativa para as operacoes comuns de cadastro.
     // Os numeros repassados a operarUsuario pertencem ao menu interno daquele metodo.
     private void menuUsuarios() throws IOException {
-        menu("GERENCIAR USUARIOS", "1 Listar todos | 2 Buscar | 3 Cadastrar | 4 Alterar\n"
-                + "5 Ativar/desativar | 6 Remover | 7 Dados de lojista | 8 Dados de entregador | 0 Voltar", opcao -> {
+        menu("CADASTRO DE USUARIOS", "1 Listar usuarios | 2 Buscar usuario | 3 Cadastrar usuario | 4 Atualizar usuario\n"
+                + "5 Ativar/desativar usuario | 6 Remover usuario | 7 Dados de lojista | 8 Dados de entregador | 0 Voltar", opcao -> {
             switch (opcao) {
                 case 1 -> listarUsuarios();
                 case 2 -> operarUsuario(1);
-                case 3 -> cadastrarPerfil();
+                case 3 -> cadastrarPerfil(true);
                 case 4 -> operarUsuario(2);
                 case 5 -> operarUsuario(3);
                 case 6 -> operarUsuario(4);
@@ -440,15 +517,15 @@ public final class ConsoleNexus {
         try {
             while (true) {
                 saida.println("\nLojista: " + (idLojista == null ? "nao selecionado" : idLojista));
-                saida.println("1 Selecionar lojista | 2 Cadastrar | 3 Listar | 4 Buscar");
-                saida.println("5 Atualizar cadastro | 6 Repor estoque | 7 Ativar/desativar | 8 Remover | 0 Sair");
-                saida.println("9 Cadastrar usuario/perfil | 10 Listar usuarios e IDs");
-                saida.println("11 Gerenciar usuario | 12 Gerenciar lojista | 13 Gerenciar entregador");
+                mostrarMenu("CADASTROS E PRODUTOS", "1 Selecionar lojista | 2 Cadastrar produto | 3 Listar produtos | 4 Buscar produto\n"
+                        + "5 Atualizar produto | 6 Repor estoque | 7 Ativar/desativar produto | 8 Remover produto\n"
+                        + "9 Cadastrar usuario/perfil | 10 Listar usuarios | 11 Gerenciar usuario\n"
+                        + "12 Gerenciar lojista | 13 Gerenciar entregador | 0 Sair");
                 try {
                     int opcao = inteiro("Opcao: ");
                     if (opcao == 0) break;
                     if (opcao == 1) { selecionarLojista(); continue; }
-                    if (opcao == 9) { cadastrarPerfil(); continue; }
+                    if (opcao == 9) { cadastrarPerfil(false); continue; }
                     if (opcao == 10) { listarUsuarios(); continue; }
                     if (opcao == 11) { gerenciarUsuario(); continue; }
                     if (opcao == 12) { gerenciarLojista(); continue; }
@@ -456,7 +533,7 @@ public final class ConsoleNexus {
                     if (opcao < 2 || opcao > 8) { saida.println("Opcao invalida."); continue; }
                     if (idLojista == null) { saida.println("Selecione um lojista primeiro."); continue; }
                     switch (opcao) {
-                        case 2 -> mostrar(produtos.cadastrar(lerCadastro(null)));
+                        case 2 -> cadastrarProduto();
                         case 3 -> listar();
                         case 4 -> buscar();
                         case 5 -> atualizar();
@@ -488,9 +565,10 @@ public final class ConsoleNexus {
     }
 
     /** Cadastros funcionam sem lojista selecionado e sem inserts manuais no SQL. */
-    private void cadastrarPerfil() throws IOException, SQLException {
+    private void cadastrarPerfil(boolean menuPorPerfil) throws IOException, SQLException {
         if (cadastros == null) throw new IllegalStateException("Cadastros indisponiveis nesta instancia.");
-        int perfil = inteiro("Perfil: 1 Cliente | 2 Lojista | 3 Entregador | 0 Voltar: ");
+        mostrarMenu("CRIAR PERFIL", "1 Cliente | 2 Lojista | 3 Entregador | 0 Voltar");
+        int perfil = inteiro("Perfil: ");
         if (perfil == 0) return;
         if (perfil < 1 || perfil > 3) throw new IllegalArgumentException("Perfil invalido.");
         var dados = new CadastroService.DadosUsuario(ler("Nome/razao social: "), ler("Documento fiscal: "), ler("Email: "));
@@ -506,10 +584,10 @@ public final class ConsoleNexus {
             catch (IllegalArgumentException erro) { throw new IllegalArgumentException("Veiculo invalido."); }
             entregador = new CadastroService.DadosEntregador(ler("Numero da CNH (vazio para bicicleta): "), tipo, ler("Bairro de operacao: "));
         }
-        char[] senha = lerSenha("Senha (15 a 128 caracteres): ");
+        char[] senha = lerLinha("Senha: " + FAIXA_SENHA).toCharArray();
         char[] confirmacao = null;
         try {
-            confirmacao = lerSenha("Confirme a senha: ");
+            confirmacao = lerLinha("Confirme a senha: ").toCharArray();
             if (!Arrays.equals(senha, confirmacao)) throw new IllegalArgumentException("Senhas nao conferem.");
             UsuarioRegistro salvo = switch (perfil) {
                 case 1 -> cadastros.cadastrarCliente(dados, senha);
@@ -517,8 +595,14 @@ public final class ConsoleNexus {
                 case 3 -> cadastros.cadastrarEntregador(dados, senha, entregador);
                 default -> throw new IllegalStateException("Perfil inesperado.");
             };
-            saida.println("Cadastro concluido. ID " + salvo.id() + " | " + salvo.nome() + " | " + salvo.perfil());
-            if (perfil == 2) { idLojista = salvo.id(); saida.println("Lojista selecionado para cadastrar produtos."); }
+            saida.println("\nPerfil cadastrado com sucesso!");
+            mostrarUsuario(salvo);
+            if (menuPorPerfil) {
+                saida.println("No menu inicial, escolha Entrar e use o e-mail e a senha cadastrados.");
+            } else if (salvo.perfil() == PerfilUsuario.LOJISTA) {
+                idLojista = salvo.id();
+                saida.println("Lojista selecionado para cadastrar produtos.");
+            }
         } finally {
             Arrays.fill(senha, '\0');
             if (confirmacao != null) Arrays.fill(confirmacao, '\0');
@@ -529,15 +613,22 @@ public final class ConsoleNexus {
     private void listarUsuarios() throws IOException, SQLException {
         if (cadastros == null) throw new IllegalStateException("Cadastros indisponiveis nesta instancia.");
         var usuarios = cadastros.listarUsuarios(20, inteiro("Pular quantos registros (0 para inicio): "));
-        if (usuarios.isEmpty()) saida.println("Nenhum usuario nesta pagina. Use 9 para cadastrar.");
-        for (UsuarioRegistro usuario : usuarios)
-            saida.println("ID " + usuario.id() + " | " + usuario.nome() + " | " + usuario.perfil() + " | ativo " + usuario.ativo());
+        if (usuarios.isEmpty()) saida.println("Nenhum usuario nesta pagina.");
+        for (UsuarioRegistro usuario : usuarios) mostrarUsuario(usuario);
+    }
+
+    private void mostrarUsuario(UsuarioRegistro usuario) {
+        saida.println("\nID: " + usuario.id());
+        saida.println("Nome: " + usuario.nome());
+        saida.println("Perfil: " + usuario.perfil());
+        saida.println("Ativo: " + (Boolean.TRUE.equals(usuario.ativo()) ? "Sim" : "Nao"));
     }
 
     /** Gestao de dados comuns; confirma alvo antes de desativar/remover, sem trocar perfil. */
     private void gerenciarUsuario() throws IOException, SQLException {
         if (usuarios == null) throw new IllegalStateException("Gestao de usuarios indisponivel nesta instancia.");
-        int opcao = inteiro("Usuario: 1 Buscar | 2 Atualizar dados | 3 Ativar/desativar | 4 Remover | 0 Voltar: ");
+        mostrarMenu("GERENCIAR USUARIO", "1 Buscar usuario | 2 Atualizar dados | 3 Ativar/desativar | 4 Remover usuario | 0 Voltar");
+        int opcao = inteiro("Opcao: ");
         if (opcao == 0) return;
         if (opcao < 1 || opcao > 4) throw new IllegalArgumentException("Opcao invalida.");
         operarUsuario(opcao);
@@ -549,7 +640,7 @@ public final class ConsoleNexus {
         var atual = usuarios.buscar(id);
         if (atual.isEmpty()) { saida.println("Usuario nao encontrado."); return; }
         var usuario = atual.orElseThrow();
-        saida.println("ID " + usuario.id() + " | " + usuario.nome() + " | " + usuario.perfil() + " | ativo " + usuario.ativo());
+        mostrarUsuario(usuario);
         switch (opcao) {
             case 1 -> { }
             case 2 -> resultado(usuarios.atualizar(id, new CadastroService.DadosUsuario(
@@ -561,9 +652,15 @@ public final class ConsoleNexus {
                 if (alterado && !ativo && idLojista != null && idLojista == id) idLojista = null;
             }
             case 4 -> {
-                if (simNao("Remover definitivamente este CLIENTE inativo sem historico (s/n): "))
+                if (usuario.perfil() != PerfilUsuario.CLIENTE) {
+                    saida.println("A remoção está disponível apenas para clientes inativos e sem histórico.");
+                } else if (!Boolean.FALSE.equals(usuario.ativo())) {
+                    saida.println("Antes de remover, escolha Ativar/desativar usuário e responda n para desativar o cliente.");
+                } else if (simNao("Remover definitivamente este cliente (s/n): ")) {
                     resultado(usuarios.excluir(id));
-                else saida.println("Remocao cancelada.");
+                } else {
+                    saida.println("Remocao cancelada.");
+                }
             }
             default -> throw new IllegalStateException("Opcao inesperada.");
         }
@@ -572,11 +669,14 @@ public final class ConsoleNexus {
     /** Cadastro comercial nao modifica dados comuns, produtos ou comissoes historicas. */
     private void gerenciarLojista() throws IOException, SQLException {
         if (lojistas == null) throw new IllegalStateException("Gestao de lojistas indisponivel nesta instancia.");
-        int opcao = inteiro("Lojista: 1 Buscar | 2 Listar | 3 Atualizar comercial | 0 Voltar: ");
+        mostrarMenu("CADASTRO DE LOJISTAS", "1 Buscar lojista | 2 Listar lojistas | 3 Atualizar dados comerciais | 0 Voltar");
+        int opcao = inteiro("Opcao: ");
         if (opcao == 0) return;
         if (opcao == 2) {
-            for (var loja : lojistas.listar(20, inteiro("Pular quantos registros: ")))
-                saida.println("ID " + loja.id() + " | " + loja.nomeFantasia());
+            for (var loja : lojistas.listar(20, inteiro("Pular quantos registros: "))) {
+                saida.println("\nID: " + loja.id());
+                saida.println("Nome fantasia: " + loja.nomeFantasia());
+            }
             return;
         }
         if (opcao != 1 && opcao != 3) throw new IllegalArgumentException("Opcao invalida.");
@@ -584,8 +684,11 @@ public final class ConsoleNexus {
         var atual = lojistas.buscar(id);
         if (atual.isEmpty()) { saida.println("Lojista nao encontrado."); return; }
         var dados = atual.orElseThrow().getDadosLojista().orElseThrow();
-        saida.println("ID " + dados.id() + " | " + dados.nomeFantasia() + " | comissao % " + dados.taxaComissaoPct()
-                + " | " + dados.bairroOperacao() + " | " + dados.enderecoOrigem());
+        saida.println("\nID: " + dados.id());
+        saida.println("Nome fantasia: " + dados.nomeFantasia());
+        saida.println("Comissao: " + dados.taxaComissaoPct() + "%");
+        saida.println("Bairro de operacao: " + dados.bairroOperacao());
+        saida.println("Endereco de origem: " + dados.enderecoOrigem());
         if (opcao == 3) resultado(lojistas.atualizar(new LojistaRegistro(id, ler("Nome fantasia: "),
                 decimal("Comissao em %: "), ler("Bairro de operacao: "), ler("Endereco de origem: "))));
     }
@@ -593,15 +696,15 @@ public final class ConsoleNexus {
     /** Disponibilidade e alteracoes de veiculo passam pelo service, sem liberar EM_ROTA. */
     private void gerenciarEntregador() throws IOException, SQLException {
         if (entregadores == null) throw new IllegalStateException("Gestao de entregadores indisponivel nesta instancia.");
-        int opcao = inteiro("Entregador: 1 Buscar | 2 Atualizar cadastro | 3 Disponivel | 4 Inativo | 0 Voltar: ");
+        mostrarMenu("CADASTRO DE ENTREGADORES", "1 Buscar entregador | 2 Atualizar cadastro | 3 Disponivel | 4 Inativo | 0 Voltar");
+        int opcao = inteiro("Opcao: ");
         if (opcao == 0) return;
         if (opcao < 1 || opcao > 4) throw new IllegalArgumentException("Opcao invalida.");
         long id = inteiro("ID do entregador: ");
         var atual = entregadores.buscar(id);
         if (atual.isEmpty()) { saida.println("Entregador nao encontrado."); return; }
         var dados = atual.orElseThrow().toEntregadorRegistro();
-        saida.println("ID " + id + " | " + atual.orElseThrow().getNome() + " | " + dados.tipoVeiculo()
-                + " | " + dados.bairroOperacao() + " | " + dados.statusOperacao());
+        mostrarEntregador(atual.orElseThrow());
         if (opcao == 2) {
             TipoVeiculo tipo;
             try { tipo = TipoVeiculo.valueOf(ler("Veiculo (BICICLETA/MOTO/CARRO/VAN): ").toUpperCase(java.util.Locale.ROOT)); }
@@ -619,10 +722,13 @@ public final class ConsoleNexus {
             return valor;
         }
         saida.println("Entrada sem ocultacao de senha neste ambiente.");
-        saida.print(mensagem); saida.flush();
-        String valor = entrada.readLine();
-        if (valor == null) throw new EOFException();
-        return valor.toCharArray();
+        return lerLinha(mensagem).toCharArray();
+    }
+
+    private void cadastrarProduto() throws IOException, SQLException {
+        var produto = produtos.cadastrar(lerCadastro(null));
+        saida.println("\nProduto cadastrado com sucesso!");
+        mostrar(produto);
     }
 
     /** Le cadastro completo; estoque/atividade so sao pedidos na criacao. */
@@ -633,7 +739,7 @@ public final class ConsoleNexus {
         BigDecimal preco = decimal("Preco (ex.: 12,50): ");
         BigDecimal peso = decimal("Peso em kg (ex.: 1,250): ");
         int estoque = atual == null ? inteiro("Estoque inicial: ") : atual.estoqueDisponivel();
-        Boolean ativo = atual == null ? simNao("Ativo (s/n): ") : atual.ativo();
+        Boolean ativo = atual == null ? Boolean.valueOf(simNao("Ativo (s/n): ")) : atual.ativo();
         return new ProdutoRegistro(atual == null ? null : atual.id(), idLojista,
                 nome, categoria, descricao, preco, peso, estoque, ativo);
     }
@@ -672,10 +778,15 @@ public final class ConsoleNexus {
 
     /** Exibe somente dados do produto e nunca credenciais do usuario. */
     private void mostrar(ProdutoRegistro p) {
-        saida.println("ID " + p.id() + " | " + p.nome() + " | " + p.categoria()
-                + " | R$ " + p.precoUnitario().toPlainString() + " | kg " + p.pesoKg().toPlainString()
-                + " | estoque " + p.estoqueDisponivel() + " | ativo " + p.ativo());
+        saida.println("\nID: " + p.id());
+        saida.println("Nome: " + p.nome());
         if (p.descricao() != null) saida.println("Descricao: " + p.descricao());
+        saida.println("Categoria: " + p.categoria());
+        saida.println("Preco: R$ " + p.precoUnitario().toPlainString());
+        saida.println("Peso: " + p.pesoKg().toPlainString() + " kg");
+        saida.println("Estoque: " + p.estoqueDisponivel());
+        String atividade = p.ativo() == null ? "Não informado" : p.ativo() ? "Sim" : "Nao";
+        saida.println("Ativo: " + atividade);
     }
 
     /** false tambem pode indicar estado/saldo indisponivel, nao sucesso silencioso. */
@@ -685,10 +796,14 @@ public final class ConsoleNexus {
 
     /** Le uma linha inteira para evitar mistura de nextInt/nextLine e trata EOF. */
     private String ler(String mensagem) throws IOException {
+        return lerLinha(mensagem).strip();
+    }
+
+    private String lerLinha(String mensagem) throws IOException {
         saida.print(mensagem); saida.flush();
         String linha = terminal == null ? entrada.readLine() : terminal.readLine();
         if (linha == null) throw new EOFException();
-        return linha.strip();
+        return linha;
     }
 
     /** Inteiros invalidos interrompem a operacao e voltam ao menu. */

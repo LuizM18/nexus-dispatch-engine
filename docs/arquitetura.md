@@ -1,11 +1,10 @@
 # Arquitetura Java atual
 
-03/11/2026. Fluxo existente: chamador/teste -> service -> DAO -> JDBC -> MySQL.
-Primeiro terminal existente: ConsoleNexus chama ProdutoService para CRUD,
-reposicao/atividade e DELETE protegido de produto sem historico. Usa contexto de
-demonstracao por ID, sem login. Demais fluxos de interface ainda pendentes.
-Menu deve chamar services nas operacoes com
-regras/varias escritas; nao duplicar calculos e transacoes na interface.
+Fluxo: ConsoleNexus -> service -> DAO -> JDBC -> MySQL. O terminal autentica
+a conta ativa com e-mail e senha e abre o menu do perfil retornado. Usa o ID
+autenticado nas operacoes da propria conta, como pedidos do cliente,
+disponibilidade do entregador e produtos do lojista. Regras de negocio e
+transacoes permanecem nos services.
 
 - model: dominio e registros JDBC; validar objetos nao persiste dados.
 - enums: perfis/estados; enums antigos ainda precisam de reconciliacao.
@@ -23,10 +22,10 @@ ProdutoService: transacao dedicada por operacao, contexto de lojista ativo,
 propriedade, cadastro, consulta, atualizacao, reposicao, atividade e remocao.
 ProdutoDao.excluirSemHistorico protege compras vinculadas com bloqueio/FK.
 
-CadastroService: usuario e complemento LOJISTA/ENTREGADOR na mesma transacao;
-CLIENTE sem tabela ficticia. Console cadastra os tres perfis e lista IDs.
-SenhaService: PBKDF2 do JDK, formato P2 de 60 caracteres, salt aleatorio e
-verificacao propria do formato. Nao implica login ou autorizacao implementados.
+CadastroService: usuario e complemento LOJISTA/ENTREGADOR na mesma transacao.
+UsuarioService autentica consultando a credencial ativa e verificando o hash
+com SenhaService. O hash usa PBKDF2 do JDK, formato P2 de 60 caracteres e salt
+aleatorio. A resposta do login traz apenas o cadastro, sem o hash.
 
 EntregaService: aceite coordenado/exclusivo. Coleta, conclusao, liberacao e
 cancelamento integral ainda nao estao integrados nos services, mesmo havendo

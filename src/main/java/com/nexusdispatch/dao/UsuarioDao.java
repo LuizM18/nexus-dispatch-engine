@@ -23,7 +23,7 @@ import java.util.Optional;
  * o service deve inserir ambas as partes na mesma transacao.
  */
 public final class UsuarioDao {
-    // Colunas deliberadamente explicitas; a senha_hash nunca faz parte das leituras.
+    // Consultas de cadastro nao incluem senha_hash.
     private static final String COLUNAS = "id_usuario, nome_razao_social, documento_fiscal, "
             + "email, tipo_perfil, data_cadastro, status_ativo";
     // A conexao e compartilhada com outros DAOs durante a mesma operacao/transacao.
@@ -117,7 +117,8 @@ public final class UsuarioDao {
             for (int i = 1; i <= 4; i++) s.setLong(i, id);
             try (ResultSet r = s.executeQuery()) {
                 r.next();
-                if (r.getBoolean(1)) throw new IllegalStateException("Usuario possui vinculos/historico e deve ser preservado.");
+                if (r.getBoolean(1)) throw new IllegalStateException(
+                        "Este cliente tem histórico ou vínculos. Mantenha o cadastro desativado.");
             }
         }
         return excluir(id);
@@ -135,6 +136,24 @@ public final class UsuarioDao {
         }
     }
 
+    /** Resultado exclusivo da consulta de login. */
+    public record Credencial(UsuarioRegistro usuario, String hash) {
+        @Override public String toString() { return "Credencial[id=" + usuario.id() + "]"; }
+    }
+
+    /** Busca o cadastro ativo e seu hash juntos para validar a senha no service. */
+    public Optional<Credencial> buscarCredencialAtiva(String email) throws SQLException {
+        email = validarEmail(email);
+        try (PreparedStatement comando = conexao.prepareStatement(
+                "SELECT " + COLUNAS + ", senha_hash FROM usuario WHERE email = ? AND status_ativo = TRUE")) {
+            comando.setString(1, email);
+            try (ResultSet resultado = comando.executeQuery()) {
+                if (!resultado.next()) return Optional.empty();
+                return Optional.of(new Credencial(mapear(resultado), resultado.getString("senha_hash")));
+            }
+        }
+    }
+
     /** Paginacao evita carregar todos os usuarios; inclui ativos e inativos. */
     public List<UsuarioRegistro> listar(int limite, int deslocamento) throws SQLException {
         if (limite < 1 || limite > 100 || deslocamento < 0) {
@@ -148,6 +167,32 @@ public final class UsuarioDao {
                 List<UsuarioRegistro> usuarios = new ArrayList<>();
                 while (resultado.next()) usuarios.add(mapear(resultado));
                 return List.copyOf(usuarios);
+            }
+        }
+    }
+
+    /** Identidade comercial exibida na selecao de loja. */
+    public record Identificacao(long id, String nome) { }
+
+    /** Lista somente nomes e IDs de lojas ativas, em ordem de ID. */
+    public List<Identificacao> listarLojasAtivasApos(long depoisDe, int limite) throws SQLException {
+        String sql = """
+                SELECT u.id_usuario, l.nome_fantasia AS nome
+                FROM usuario u
+                JOIN lojista l ON l.id_lojista = u.id_usuario
+                WHERE u.tipo_perfil = 'LOJISTA' AND u.status_ativo = TRUE AND u.id_usuario > ?
+                ORDER BY u.id_usuario
+                LIMIT ?
+                """;
+        try (PreparedStatement comando = conexao.prepareStatement(sql)) {
+            comando.setLong(1, depoisDe);
+            comando.setInt(2, limite);
+            try (ResultSet resultado = comando.executeQuery()) {
+                List<Identificacao> perfis = new ArrayList<>();
+                while (resultado.next()) {
+                    perfis.add(new Identificacao(resultado.getLong("id_usuario"), resultado.getString("nome")));
+                }
+                return List.copyOf(perfis);
             }
         }
     }

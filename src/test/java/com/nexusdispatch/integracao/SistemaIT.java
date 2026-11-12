@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 
 /** Integracao real em banco UUID descartavel; nao escreve no catalogo original. */
 class SistemaIT {
+    private static final String SENHA_TESTE = "Teste2026!";
+    private static final String HASH_TESTE = new SenhaService().gerar(SENHA_TESTE.toCharArray());
     // Constroi o decimal a partir de texto, sem aproximacao binaria de double.
     // Assim, o valor esperado pode ser comparado com o contrato monetario do modelo.
     static BigDecimal b(String s) { return new BigDecimal(s); }
@@ -115,7 +117,7 @@ class SistemaIT {
     // Cria identidade ficticia com documento/email distintos pelo nome. O hash
     // fixo tem tamanho valido para o DAO e nao representa uma senha utilizavel.
     static long usuario(Connection c, String nome, PerfilUsuario perfil) throws SQLException {
-        return new UsuarioDao(c).inserir(nome, "DOC-" + nome, nome + "@example.test", "x".repeat(60), perfil);
+        return new UsuarioDao(c).inserir(nome, "DOC-" + nome, nome + "@example.test", HASH_TESTE, perfil);
     }
     // Percorre aceite, todas as coletas e todas as conclusoes. A cada conclusao
     // confere que o entregador so fica livre depois da ultima parte ativa.
@@ -136,17 +138,25 @@ class SistemaIT {
                 "12,50", "0,250", "4", "s", "3", "0", "0");
         long id = produtos.listar(lojista, 20, 0).stream().filter(p -> p.nome().equals(nome)).findFirst().orElseThrow().id();
         String item = Long.toString(id);
-        ok(cadastro.lines().filter(linha -> linha.contains("ID " + item + " | " + nome)).count() == 2,
+        String registro = "ID: " + item + System.lineSeparator() + "Nome: " + nome;
+        ok(cadastro.indexOf(registro) >= 0 && cadastro.indexOf(registro) != cadastro.lastIndexOf(registro)
+                && cadastro.contains("Produto cadastrado com sucesso!"),
                 "Terminal cadastra e lista o produto salvo");
 
         String editado = "Produto da banca editado";
+        try (var conexao = fabrica.abrir()) {
+            sql(conexao, "UPDATE produto SET status_ativo = NULL WHERE id_produto = " + id);
+        }
         String edicao = executarTerminal(fabrica, "1", loja, "4", item, "5", item, editado, "OUTROS", "",
                 "15,90", "0,250", "0");
-        ok(edicao.contains("ID " + item + " | " + nome) && edicao.contains("Operacao concluida."),
+        ok(edicao.contains(registro) && edicao.contains("Operacao concluida."),
                 "Outra abertura do terminal busca e atualiza o mesmo registro");
+        ok(produtos.buscar(lojista, id).orElseThrow().ativo() == null,
+                "Editar pelo terminal preserva o status nao informado");
 
         String exclusao = executarTerminal(fabrica, "1", loja, "4", item, "8", item, "s", "4", item, "0");
-        ok(exclusao.contains("ID " + item + " | " + editado + " | OUTROS | R$ 15.90")
+        ok(exclusao.contains(String.join(System.lineSeparator(), "ID: " + item, "Nome: " + editado,
+                "Categoria: OUTROS", "Preco: R$ 15.90"))
                 && exclusao.contains("Produto nao encontrado para este lojista.") && produtos.buscar(lojista, id).isEmpty(),
                 "Terminal mostra a edicao persistida, executa DELETE e confirma ausencia no MySQL");
     }
@@ -174,25 +184,32 @@ class SistemaIT {
             long loja, long produto) throws Exception {
         var compra = new CompraService(fabrica, b("7"), p -> true);
         var catalogo = new ProdutoService(fabrica::abrir);
-        String idLoja = Long.toString(loja), idCliente = Long.toString(cliente), idProduto = Long.toString(produto);
+        var dao = new UsuarioDao(c);
+        String emailLoja = dao.buscarPorId(loja).orElseThrow().email();
+        String emailCliente = dao.buscarPorId(cliente).orElseThrow().email();
+        String idLoja = Long.toString(loja), idProduto = Long.toString(produto);
         int saldo = catalogo.buscar(loja, produto).orElseThrow().estoqueDisponivel();
-        String lojaCli = executarTerminalPorPerfil(fabrica, compra, "2", idLoja,
+        String lojaCli = executarTerminalPorPerfil(fabrica, compra, "1", emailLoja, SENHA_TESTE,
                 "1", "Caneca do roteiro", "OUTROS", "", "8,50", "0,5", "3", "s", "2", "0", "0", "0");
         String idRetirado = catalogo.listar(loja, 20, 0).stream().filter(p -> p.nome().equals("Caneca do roteiro"))
                 .findFirst().orElseThrow().id().toString();
-        ok(lojaCli.lines().filter(l -> l.contains("ID " + idRetirado + " | Caneca do roteiro")).count() == 2,
+        String registro = "ID: " + idRetirado + System.lineSeparator() + "Nome: Caneca do roteiro";
+        ok(lojaCli.indexOf(registro) >= 0 && lojaCli.indexOf(registro) != lojaCli.lastIndexOf(registro)
+                && lojaCli.contains("=== CADASTRO DE PRODUTOS ===")
+                && lojaCli.contains("1. Cadastrar produto" + System.lineSeparator() + "2. Listar produtos"),
                 "Novo menu lojista cadastra e lista produto");
 
         // As strings sao respostas sequenciais aos menus: seleciona cliente/loja,
         // adiciona e edita itens, remove um produto e confirma a compra. As consultas
         // abaixo conferem o efeito no MySQL, alem do texto impresso pelo console.
-        String clienteCli = executarTerminalPorPerfil(fabrica, compra, "1", idCliente, "1", idLoja, "0", "2",
+        String clienteCli = executarTerminalPorPerfil(fabrica, compra, "1", emailCliente, SENHA_TESTE, "1", "?", idLoja, "0", "2",
                 "2", idProduto, "1", "2", idRetirado, "1", "3", idProduto, "2", "4", idRetirado, "1", "0",
                 "1", idLoja, "0", "2", "1", "5", "1", "s", "1", "0", "3", "1", "0", "0", "0", "0");
         var pedido = compra.listarHistorico(cliente, 1, 0).getFirst();
         var partes = compra.buscarCompra(cliente, pedido.id()).orElseThrow().comandas();
         ok(clienteCli.contains("Produto retirado do carrinho.") && clienteCli.contains("Pagamento: AUTORIZADO")
-                && clienteCli.contains("Carrinho vazio.") && clienteCli.contains("MEUS PEDIDOS"),
+                && clienteCli.contains("Carrinho vazio.") && clienteCli.contains("MEUS PEDIDOS")
+                && clienteCli.contains("ID " + loja + " - Loja A") && !clienteCli.contains(emailLoja),
                 "Terminal adiciona, altera, retira, confirma e mostra historico");
         ok(partes.size() == 1 && partes.getFirst().itens().size() == 1
                 && partes.getFirst().itens().getFirst().idProduto() == produto
@@ -200,23 +217,21 @@ class SistemaIT {
                 && catalogo.buscar(loja, produto).orElseThrow().estoqueDisponivel() == saldo - 2
                 && catalogo.buscar(loja, Long.parseLong(idRetirado)).orElseThrow().estoqueDisponivel() == 3,
                 "Pedido e baixa contêm somente o item mantido no carrinho");
-        String remover = executarTerminalPorPerfil(fabrica, compra, "2", idLoja, "7", idRetirado, "s", "3", idRetirado, "0", "0");
+        String remover = executarTerminalPorPerfil(fabrica, compra, "1", emailLoja, SENHA_TESTE,
+                "7", idRetirado, "s", "3", idRetirado, "0", "0");
         ok(remover.contains("Produto nao encontrado para este lojista.")
                 && catalogo.buscar(loja, Long.parseLong(idRetirado)).isEmpty(), "Lojista exclui produto sem historico");
 
-        var dao = new UsuarioDao(c);
-        String senhaTeste = "Senha-Ficticia-2026!";
-        executarTerminalPorPerfil(fabrica, compra, "5", "3", "Entrega do roteiro", "CLI-E", "entrega-cli@example.test",
+        String senhaTeste = SENHA_TESTE;
+        executarTerminalPorPerfil(fabrica, compra, "2", "3", "Entrega do roteiro", "CLI-E", "entrega-cli@example.test",
                 "BICICLETA", "", "Centro", senhaTeste, senhaTeste, "0");
         long entregador = dao.buscarPorEmail("entrega-cli@example.test").orElseThrow().id();
         ok(estado(c, entregador) == StatusOperacaoEntregador.INATIVO, "Perfil criado inativo pelo terminal");
-        String entregadorCli = executarTerminalPorPerfil(fabrica, compra, "3", Long.toString(entregador), "2", "3", "0", "0");
+        String entregadorCli = executarTerminalPorPerfil(fabrica, compra,
+                "1", "entrega-cli@example.test", senhaTeste, "2", "3", "0", "0");
         ok(entregadorCli.contains("Situacao: DISPONIVEL") && estado(c, entregador) == StatusOperacaoEntregador.INATIVO,
                 "Disponibilidade e inativacao pelo terminal");
 
-        String bloqueio = executarTerminalPorPerfil(fabrica, compra, "4", idCliente, "0");
-        ok(bloqueio.contains("Selecione um usuario ativo com perfil ADMIN") && !bloqueio.contains("Gerenciar usuarios"),
-                "Perfil cliente nao acessa o menu administrativo");
         var cadastroAdmin = new CadastroService(fabrica::abrir, new SenhaService());
         var saidaAdmin = new StringWriter();
         var configuracao = String.join("\n", "Administrador do roteiro", "CLI-ADMIN", "admin-cli@example.test",
@@ -227,15 +242,40 @@ class SistemaIT {
         ok(saidaAdmin.toString().contains("Administrador cadastrado. ID " + admin), "Provisionamento inicial pelo terminal");
         recusar(() -> cadastroAdmin.cadastrarAdministradorInicial(
                 new CadastroService.DadosUsuario("Segundo admin", "CLI-ADMIN2", "admin2-cli@example.test"), senhaTeste.toCharArray()));
-        String adminCli = executarTerminalPorPerfil(fabrica, compra, "4", admin, "1", "1", "0", "3", "1", "Cliente administrativo",
+        String bloqueio = executarTerminalPorPerfil(fabrica, compra,
+                "1", admin, senhaTeste, "1", "admin-cli@example.test", "senha incorreta",
+                "1", emailCliente, senhaTeste, "4", "0", "4", "0");
+        ok(bloqueio.contains("Não foi possível entrar.") && bloqueio.contains("CLIENTE | ")
+                && bloqueio.contains("Você saiu da conta.") && !bloqueio.contains("Gerenciar usuarios"),
+                "ID e senha incorreta nao autenticam; cliente e sessao encerrada nao acessam o admin");
+        String adminCli = executarTerminalPorPerfil(fabrica, compra, "1", "admin-cli@example.test", senhaTeste,
+                "1", "1", "0", "3", "1", "Cliente administrativo",
                 "CLI-C", "cliente-cli@example.test", senhaTeste, senhaTeste, "0", "3", pedido.id().toString(), "0", "0");
-        ok(adminCli.contains("Entrega do roteiro | ENTREGADOR") && adminCli.contains("Pedido " + pedido.id())
+        ok(adminCli.contains("Nome: Entrega do roteiro" + System.lineSeparator() + "Perfil: ENTREGADOR")
+                && adminCli.contains("Pedido " + pedido.id())
                 && !adminCli.contains(senhaTeste), "Admin lista usuarios e consulta pedidos sem expor senha");
         String novo = Long.toString(dao.buscarPorEmail("cliente-cli@example.test").orElseThrow().id());
-        String adminCrud = executarTerminalPorPerfil(fabrica, compra, "4", admin, "1", "2", novo, "4", novo,
+        String adminCrud = executarTerminalPorPerfil(fabrica, compra, "1", "admin-cli@example.test", senhaTeste,
+                "1", "2", novo, "4", novo,
                 "Cliente administrativo editado", "CLI-C", "cliente-cli@example.test", "5", novo, "n", "6", novo, "s", "0", "0", "0");
         ok(adminCrud.lines().filter(l -> l.contains("Operacao concluida.")).count() == 3
                 && dao.buscarPorId(Long.parseLong(novo)).isEmpty(), "Admin edita, desativa e remove cliente sem vinculos");
+
+        var usuarios = new UsuarioService(fabrica::abrir);
+        usuarios.definirAtivo(entregador, false);
+        String inativo = executarTerminalPorPerfil(fabrica, compra, "1", "entrega-cli@example.test", senhaTeste, "0");
+        ok(inativo.contains("Não foi possível entrar.") && !inativo.contains("Consultar perfil"),
+                "Conta desativada nao entra mesmo com a senha certa");
+
+        long outraLoja = usuario(c, "lojaexclusiva", PerfilUsuario.LOJISTA);
+        new LojistaDao(c).inserir(new LojistaRegistro(outraLoja, "Loja exclusiva", b("5"), "Centro", "Rua B"));
+        var produtoAlheio = catalogo.cadastrar(new ProdutoRegistro(null, outraLoja,
+                "Item exclusivo", "OUTROS", null, b("10"), b("1"), 3, true));
+        String isolado = executarTerminalPorPerfil(fabrica, compra, "1", emailLoja, senhaTeste,
+                "4", produtoAlheio.id().toString(), "0", "0");
+        ok(isolado.contains("Produto nao encontrado para este lojista.")
+                && !isolado.contains("Item exclusivo") && !isolado.contains("ID da loja ("),
+                "Lojista entra na propria loja e nao pode abrir a edicao de produto alheio");
 
         var itens = List.of(new CompraService.ItemCarrinho(produto, 1, null));
         var antes = compra.cotar(cliente, itens);

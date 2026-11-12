@@ -14,6 +14,9 @@ import javax.crypto.spec.PBEKeySpec;
  * Nao e bcrypt e nao deve ser verificado como bcrypt por outro componente.
  */
 public final class SenhaService {
+    public static final int MIN_CARACTERES = 10;
+    public static final int MAX_CARACTERES = 128;
+
     // P2 identifica o formato e 600000 registra o numero de iteracoes aceito.
     // P2$ tem 3 caracteres; 600000 tem 6; o ultimo $ tem 1: prefixo de 10.
     // Com salt, separador e derivado, o texto ocupa os 60 caracteres exigidos pelo DAO.
@@ -21,10 +24,10 @@ public final class SenhaService {
     private static final SecureRandom ALEATORIO = new SecureRandom();
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
-    /** Politica inicial: 15 a 128 caracteres UTF-16, preservando espacos e Unicode. */
+    /** Valida o comprimento em unidades UTF-16, preservando espacos e Unicode. */
     public String gerar(char[] senha) {
-        if (senha == null || senha.length < 15 || senha.length > 128)
-            throw new IllegalArgumentException("Senha deve conter de 15 a 128 caracteres.");
+        if (senha == null || senha.length < MIN_CARACTERES || senha.length > MAX_CARACTERES)
+            throw new IllegalArgumentException("Senha deve conter de " + MIN_CARACTERES + " a " + MAX_CARACTERES + " caracteres.");
         boolean preenchida = false;
         for (char caractere : senha) if (!Character.isWhitespace(caractere)) preenchida = true;
         if (!preenchida) throw new IllegalArgumentException("Senha nao pode conter apenas espacos.");
@@ -44,7 +47,7 @@ public final class SenhaService {
     public boolean verificar(char[] senha, String hash) {
         // So processa o formato conhecido. A contagem de iteracoes nao vem livremente
         // do texto recebido: a expressao exige o valor fixo suportado por esta versao.
-        if (senha == null || senha.length > 128 || hash == null
+        if (senha == null || senha.length > MAX_CARACTERES || hash == null
                 || !hash.matches("P2\\$600000\\$[A-Za-z0-9_-]{22}\\$[A-Za-z0-9_-]{27}")) return false;
         String[] partes = hash.split("\\$");
         byte[] salt, esperado;

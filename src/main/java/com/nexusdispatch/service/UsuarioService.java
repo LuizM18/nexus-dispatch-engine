@@ -7,13 +7,25 @@ import com.nexusdispatch.model.UsuarioRegistro;
 import java.sql.SQLException;
 import java.util.*;
 
-/** Gestao de demonstracao sem credenciais nas respostas; nao implementa autorizacao de sessao. */
+/** Autenticacao e gestao de contas, sem credenciais nas respostas. */
 public final class UsuarioService {
     private final TransacaoJdbc.FabricaConexao fabrica;
+    private final SenhaService senhas = new SenhaService();
     /** Usa conexao externa; cadastro de usuario continua no CadastroService. */
     public UsuarioService() { this(ConexaoBD::conectar); }
     /** Injeta catalogo de testes sem alterar a configuracao real. */
     public UsuarioService(TransacaoJdbc.FabricaConexao fabrica) { this.fabrica = Objects.requireNonNull(fabrica); }
+
+    /** Verifica a senha apos fechar a conexao. Retorna apenas a identidade autenticada. */
+    public Optional<UsuarioRegistro> autenticar(String email, char[] senha) throws SQLException {
+        Optional<UsuarioDao.Credencial> credencial;
+        try {
+            credencial = TransacaoJdbc.executar(fabrica, c -> new UsuarioDao(c).buscarCredencialAtiva(email));
+        } catch (IllegalArgumentException emailInvalido) {
+            return Optional.empty();
+        }
+        return credencial.filter(c -> senhas.verificar(senha, c.hash())).map(UsuarioDao.Credencial::usuario);
+    }
 
     /** Consulta publica do cadastro, sem carregar senha_hash. */
     public Optional<UsuarioRegistro> buscar(long id) throws SQLException {
@@ -24,6 +36,14 @@ public final class UsuarioService {
     /** Pagina limitada; nao expor listagem como se fosse autenticacao. */
     public List<UsuarioRegistro> listar(int limite, int deslocamento) throws SQLException {
         return TransacaoJdbc.executar(fabrica, c -> new UsuarioDao(c).listar(limite, deslocamento));
+    }
+
+    /** Consulta paginada para localizar uma loja no catalogo ou na gestao. */
+    public List<UsuarioDao.Identificacao> listarLojasAtivasApos(long depoisDe, int limite)
+            throws SQLException {
+        if (depoisDe < 0 || limite < 1 || limite > 100)
+            throw new IllegalArgumentException("Pagina de lojas invalida.");
+        return TransacaoJdbc.executar(fabrica, c -> new UsuarioDao(c).listarLojasAtivasApos(depoisDe, limite));
     }
 
     /** Atualiza dados comuns, nunca perfil/hash ou complementos comerciais. */

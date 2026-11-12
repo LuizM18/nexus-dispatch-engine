@@ -4,7 +4,7 @@ Projeto academico de logistica local: consumidores compram produtos de lojas e e
 
 ## Estado atual - 03/11/2026
 
-Atualização de 07/11. O terminal abre menus de cliente, lojista, entregador e administrador. Para ensaiar o pedido com uma taxa de exemplo, rode `./scripts/RunConsole.ps1 -TaxaCompraPct 7`. O [roteiro da banca](docs/explicacoes/33-terminal-banca.md) cobre CRUD, carrinho, disponibilidade e cadastro inicial de administrador.
+O terminal abre a área de cliente, lojista, entregador ou administrador após o login com e-mail e senha. Para ensaiar o pedido com uma taxa de exemplo, rode `./scripts/RunConsole.ps1 -TaxaCompraPct 7`. O [roteiro da banca](docs/explicacoes/33-terminal-banca.md) cobre login, CRUD, carrinho, disponibilidade e cadastro inicial de administrador.
 
 Atualizacao de 06/11: EntregaService agora possui aceite em lote, preparo,
 coleta, conclusao coordenada e desistência anterior a coleta. Checkout com o
@@ -29,13 +29,11 @@ Esta secao substitui as listas historicas abaixo. Referencias atuais:
   Loja/Produto/Oferta possuem visoes JDBC sem estoque paralelo ao snapshot.
   Compra/Pedido/ItemPedido/OrdemEntrega reconstituem vinculos/totais e estados
   SQL; primeira rodada de correspondencia das classes concluida, integracao final pendente.
-- Primeiro menu funcional: ConsoleNexus, CRUD de produtos, reposicao e atividade
-  via ProdutoService. Selecao de lojista por ID em demonstracao, sem login.
-  Execute `./scripts/RunConsole.ps1`. Menus dos demais fluxos ainda pendentes.
-- Opcao 9 cadastra cliente/lojista/entregador; opcao 10 lista usuarios e IDs.
-  Lojista novo fica selecionado para cadastrar produtos. Banco vazio nao exige
-  inserts manuais. CadastroService grava usuario/complemento juntos; SenhaService
-  usa PBKDF2 do JDK em formato P2 de 60 caracteres. Isso ainda nao e login.
+- Execute `./scripts/RunConsole.ps1` para entrar com e-mail e senha. O lojista
+  gerencia o catálogo da própria loja.
+- A opção Criar perfil cadastra cliente, lojista ou entregador. CadastroService
+  grava usuário e complemento juntos. SenhaService gera e verifica o hash PBKDF2
+  no formato P2 de 60 caracteres.
 - UML existente segundo o usuario; conferencia adiada por falta de acesso.
 - O DDL base e a atualizacao V6.1 estao na raiz do repositorio. A instalacao do zero ainda precisa ser verificada.
 - Ultimas verificacoes registradas: compilacao estrita, regressao incluindo
